@@ -1,6 +1,6 @@
 # RD Matrix
 # A simple (bad) matrix project
-# version 0.1
+# version 0.2
 
 RDM_EXP_DEPTH = 40 # Depth for power series of exp(M), set to -1 for NotImplemented
 RDM_LOG_DEPTH = 100
@@ -8,7 +8,7 @@ import math
 
 class Matrix:
     def __init__(self,shape=(0,0),elements=[],*,matrix=None):
-        self.isabadmatrix= True
+        self.isardmatrix= True
         if matrix != None:
             self.shape = matrix.shape
             self.elements = matrix.elements
@@ -21,7 +21,11 @@ class Matrix:
                     raise ValueError("Invalid shape - wrong number of element cells")
             else:
                 raise ValueError("Only 2 dimentions are allowed for shape")
-
+    def __call__(self,other):
+        if type(other) == Vector:
+            return Vector(matrix=self*other)
+        else:
+            return NotImplemented
     def __getitem__(self,index):
         """ A[x,y] (0-indexed) """
         return self.elements[index[1]+index[0]*self.shape[1]]
@@ -132,7 +136,13 @@ class Matrix:
     def __pow__(self,oth):
         if self.is_square():
             if is_Matrix(oth):
-                return NotImplemented   
+                if self.shape == oth.shape and self.is_square():
+                    if self*oth == oth*self:
+                        return (oth*self.log()).exp()
+                    else:
+                        return NotImplemented
+                else:
+                    return NotImplemented
             else:
                 if oth == 0:
                     return self.identity()
@@ -142,26 +152,26 @@ class Matrix:
                     return NotImplemented
         else:
             return NotImplemented
-    def __rpow__ (self,oth): # DEPENDS ON RDM_EXP_DEPTH
-        if RDM_EXP_DEPTH != -1 and self.is_square() and not is_Matrix(oth):
+    def __rpow__ (self,oth,depth=RDM_EXP_DEPTH):
+        if depth != -1 and self.is_square() and not is_Matrix(oth):
             if oth == 1:
                 return self.identity()
             else:
-                return (self*math.log(oth)).exp()
+                return (self*math.log(oth)).exp(depth)
         else:
             return NotImplemented
-    def exp(self): # DEPENDS ON RDM_EXP_DEPTH
-        if RDM_EXP_DEPTH != -1 and self.is_square():
+    def exp(self,depth=RDM_EXP_DEPTH):
+        if depth != -1 and self.is_square():
             m = self*0
-            for i in range(RDM_EXP_DEPTH+1):
+            for i in range(depth+1):
                 m += (self**i)*(1/math.factorial(i))
             return m
         else:
             return NotImplemented
-    def log(self,base=math.e): # DEPENDS ON RDM_LOG_DEPTH, DOESN'T WORK WELL
-        if RDM_LOG_DEPTH != -1 and self.is_square():
+    def log(self,base=math.e,depth=RDM_LOG_DEPTH): #DOESN'T WORK WELL
+        if depth != -1 and self.is_square():
             m = self*0
-            for i in range(1,RDM_LOG_DEPTH+2):
+            for i in range(1,depth+2):
                 m += ((-1)**(i+1))*((self-self.identity())**i)/i
             return m
         else:
@@ -178,12 +188,12 @@ class Matrix:
         
     #def zero_mat(self):
     #   return self*0
-
+# math.fsum()
 
     
 class ComplexM(Matrix):
     # Complex numbers as a matrix
-    def __init__(self,real=0,comp=0,*,matrix=None):
+    def __init__(self,first=0,comp_imag=0,*,matrix=None):
         if matrix != None:
             if matrix.shape == (2,2):
                 if matrix[0,0] == matrix[1,1] and matrix[0,1] == -matrix[1,0]:
@@ -195,10 +205,16 @@ class ComplexM(Matrix):
             else:
                 raise ValueError("Matrix doesn't represent a complex number")
         else:
-            super().__init__(shape=(2,2),elements=[real,-comp,comp,real])
+            if type(self.first) == complex:
+                real = first.real
+                comp = first.imag
+            else:
+                real = first
+                comp = comp_imag
+            super().__init__(shape=(2,2),elements=[real,-comp,comp,real])  
             self.real=real
             self.comp=comp
-
+            self.imag=comp
     def __str__(self):
         if self.bicomp == 0:
             return str(self.real)
@@ -214,6 +230,8 @@ class ComplexM(Matrix):
         return "ComplexM("+str(self.real)+","+str(self.comp)+")"
     def __abs__(self):
         return (real**2 + comp**2)*0.5
+    def __complex__(self):
+        return self.real + (0+1j)*self.comp
 
 class BicomplexM(Matrix):
     # Bicomplex numbers as a matrix
@@ -285,9 +303,52 @@ class DualM(Matrix):
     def __repr__(self):
         return "DualM("+str(self.real)+","+str(self.dual)+["","",",-1"][self.dual_t]+")"
 
+class Vector(Matrix):
+    def __init__(self,elements=[0],vector_c=True,*,matrix=None):
+        if matrix != None:
+            if matrix.shape[1] == 1:
+                self.vdir = "column"
+                super().__init__(matrix=matrix)
+            elif matrix.shape[0] == 1:
+                self.vdir = "row"
+                super().__init__(matrix=matrix)
+            else:
+                raise ValueError("Matrix does not represent a vector")
+        else:
+            if vector_c == True or vector_c == "column":
+                super().__init__(shape=(len(elements),1),elements=elements)
+                self.vdir = "column"
+            elif vector_c == False or vector_c == "row":
+                super().__init__(shape=(1,len(elements)),elements=elements)
+                self.vdir = "row"
+            else:
+                raise ValueError("vector_c must be row or column")
+    def __repr__(self):
+        return "Vector(" + repr(self.elements) + ',"' + self.vdir + '")'
+    def __matmult__(self,other): # EXTERIOR PRODUCT
+        if type(other) == Vector:
+            return self * +other
+    def __mult__(self,other): # DOT PRODUCT
+        if type(other) == Vector:
+            return ((+self) * other)[0,0]
+    def __getitem__(self,index):  
+        if len(index) == 1:
+            if self.vdir == "column":
+                pindex = [index,0]
+            elif self.vdir == "row":
+                pindex = [0,index]
+        else:
+            pindex = index
+        return self.elements[index[1]+index[0]*self.shape[1]]
+    def __setitem__(self,index,result):
+        if len(index) == 1:
+            return self.elements[index]
+        else:
+            self.elements[index[1]+index[0]*self.shape[1]] = result
+
 def is_Matrix(x):
     try:
-        a = x.isabadmatrix
+        a = x.isardmatrix
         return a
     except:
         return False
