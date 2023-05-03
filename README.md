@@ -3,5 +3,5 @@ Simple math library in Python
 
 
 # Matrix implementation notes:
-- Only 2 dimentional are supported
+- Only 2-D matrices are supported
 - APL-like matrix product is recursive
